@@ -50,6 +50,8 @@ def create_bbox(min_xyz, max_xyz, name="Color_BBox", padding=0.0):
     bbox = bpy.context.active_object
     bbox.name = name
     bbox.scale = size
+    bbox.select_set(False)
+    
     return bbox
 
 def apply_boolean_modifier(obj, bbox, operation, name, apply_now=False):
@@ -79,6 +81,10 @@ def apply_boolean_modifier(obj, bbox, operation, name, apply_now=False):
         bpy.ops.mesh.select_all(action='SELECT')
         bpy.ops.mesh.quads_convert_to_tris()
         bpy.ops.object.mode_set(mode='OBJECT')
+
+    result_obj.select_set(True)
+    view_layer = bpy.context.view_layer
+    view_layer.objects.active = result_obj
 
     return result_obj
 
@@ -147,6 +153,7 @@ def import_3mf(filepath, apply_modifiers=False, color_similarity_threshold=10, b
                 mesh_data = bpy.data.meshes.new("ImportedMesh")
                 mesh_data.from_pydata(vertices, [], faces)
                 obj_data = bpy.data.objects.new("ImportedObject", mesh_data)
+
                 bpy.context.collection.objects.link(obj_data)
 
                 mesh_data.materials.clear()
@@ -177,7 +184,7 @@ def import_3mf(filepath, apply_modifiers=False, color_similarity_threshold=10, b
                     bbox_large = create_bbox(min_xyz.copy(), max_xyz.copy(), padding=bbox_padding)
                     apply_boolean_modifier(obj_data, bbox_small, 'INTERSECT', 'Colored_Region', apply_now=apply_modifiers)
                     apply_boolean_modifier(obj_data, bbox_large, 'DIFFERENCE', 'Uncolored_Region', apply_now=apply_modifiers)
-                    
+
                     # Auto hiding the bounding boxes if we are applying modifiers automatically or else leaving them visible
                     if apply_modifiers:
                         bbox_small.hide_viewport = True
@@ -185,5 +192,6 @@ def import_3mf(filepath, apply_modifiers=False, color_similarity_threshold=10, b
                         bbox_large.hide_viewport = True
                         bbox_large.hide_render = True
 
-                obj_data.select_set(True)
+                obj_data.hide_viewport = True
+                # obj_data.select_set(True)
                 bpy.context.view_layer.objects.active = obj_data

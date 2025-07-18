@@ -177,10 +177,13 @@ def import_3mf(filepath, apply_modifiers=False, color_similarity_threshold=10, b
                     bbox_large = create_bbox(min_xyz.copy(), max_xyz.copy(), padding=bbox_padding)
                     apply_boolean_modifier(obj_data, bbox_small, 'INTERSECT', 'Colored_Region', apply_now=apply_modifiers)
                     apply_boolean_modifier(obj_data, bbox_large, 'DIFFERENCE', 'Uncolored_Region', apply_now=apply_modifiers)
-                    bbox_small.hide_viewport = True
-                    bbox_small.hide_render = True
-                    bbox_large.hide_viewport = True
-                    bbox_large.hide_render = True
+                    
+                    # Auto hiding the bounding boxes if we are applying modifiers automatically or else leaving them visible
+                    if apply_modifiers:
+                        bbox_small.hide_viewport = True
+                        bbox_small.hide_render = True
+                        bbox_large.hide_viewport = True
+                        bbox_large.hide_render = True
 
                 obj_data.select_set(True)
                 bpy.context.view_layer.objects.active = obj_data

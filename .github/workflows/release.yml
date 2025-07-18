@@ -16,10 +16,13 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v3
 
-      - name: 📦 Create ZIP archive
+      - name: Package add-on into zip
         run: |
-          mkdir -p dist
-          zip -r dist/bambu_3mf_importer.zip __init__.py import_3_mf_color.py import_3mf_vertex_colored.py
+          mkdir -p dist/3mf_import_and_color_split
+          cp __init__.py import_3mf_vertex_colored.py import_3_mf_color.py README.md dist/3mf_import_and_color_split/
+          cd dist
+          zip -r 3mf_import_and_color_split.zip 3mf_import_and_color_split
+
 
       - name: 🕓 Get current timestamp
         id: timestamp

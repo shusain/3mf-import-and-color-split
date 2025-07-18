@@ -73,7 +73,28 @@ A GitHub Actions workflow is planned to:
 * Automatically zip the add-on on push to `main`
 * Create release artifacts with version tagging
 
-Stay tuned below for the `ci.yml` configuration and instructions.
+---
+
+
+## 🚀 GitHub Actions CI
+
+This repository includes a CI pipeline (`release.yml`) that:
+
+- Watches for changes on the `main` branch
+- Automatically zips your Blender add-on files:
+  - `__init__.py`
+  - `import_3_mf_color.py`
+  - `import_3mf_vertex_colored.py`
+- Uploads a GitHub Release with the zipped plugin
+
+### 🔄 Releasing
+
+Every push to `main` will automatically:
+
+1. Create a new ZIP archive named `bambu_3mf_importer.zip`
+2. Publish a GitHub Release with a timestamp-based tag (e.g., `auto-2025-07-16T15-00-00`)
+
+You can download the latest `.zip` from the [Releases](https://github.com/shusain/3mf-import-and-color-split/releases) tab.
 
 ---
 

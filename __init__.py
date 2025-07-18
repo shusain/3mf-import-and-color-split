@@ -18,24 +18,32 @@ class ImportBambu3MFMaterial(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
-    apply_modifiers: bpy.props.BoolProperty(
+    apply_boolean: bpy.props.BoolProperty(
         name="Apply Boolean Modifiers",
         description="Apply bounding box and boolean modifiers immediately",
         default=True,
     )
-    color_similarity_threshold: bpy.props.IntProperty(
+    color_similarity_threshold: bpy.props.FloatProperty(
         name="Color Similarity Threshold",
-        description="Merge filament colors within this RGB distance (0–100)",
-        default=20,
-        min=0,
-        max=100,
+        description="Threshold for merging similar colors (Euclidean RGB distance)",
+        default=20.0,
+        min=0.0,
+        max=100.0,
+    )
+    padding: bpy.props.FloatProperty(
+        name="Bounding Box Padding (mm)",
+        description="Extra padding added around bounding box for difference split",
+        default=0.1,
+        min=0.0,
+        max=10.0,
     )
 
     def execute(self, context):
         import_3_mf_color.import_3mf(
             self.filepath,
-            apply_modifiers=self.apply_modifiers,
-            color_similarity_threshold=self.color_similarity_threshold
+            apply_modifiers=self.apply_boolean,
+            color_similarity_threshold=self.color_similarity_threshold,
+            bbox_padding=self.padding,
         )
         return {'FINISHED'}
 
@@ -45,8 +53,9 @@ class ImportBambu3MFMaterial(bpy.types.Operator):
 
     def draw(self, context):
         layout = self.layout
-        layout.prop(self, "apply_modifiers")
+        layout.prop(self, "apply_boolean")
         layout.prop(self, "color_similarity_threshold")
+        layout.prop(self, "padding")
 
 
 class ImportBambu3MFVertexColor(bpy.types.Operator):

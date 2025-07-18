@@ -4,6 +4,7 @@ import bpy
 from mathutils import Vector
 from collections import defaultdict
 import colorsys
+import fnmatch
 
 CONST_FILAMENTS = [
     "", "4", "8", "0C", "1C", "2C", "3C", "4C", "5C", "6C", "7C", "8C", "9C", "AC", "BC", "CC", "DC",
@@ -37,7 +38,11 @@ def create_material_from_rgb(rgb):
         bsdf.inputs['Base Color'].default_value = [v / 255 for v in rgb] + [1.0]
     return mat
 
-def create_bbox(min_xyz, max_xyz, name="Color_BBox"):
+def create_bbox(min_xyz, max_xyz, name="Color_BBox", padding=0.0):
+    if padding > 0.0:
+        min_xyz -= Vector((padding, padding, padding))
+        max_xyz += Vector((padding, padding, padding))
+
     center = (min_xyz + max_xyz) / 2
     size = max_xyz - min_xyz
 
@@ -57,7 +62,6 @@ def apply_boolean_modifier(obj, bbox, operation, name, apply_now=False):
     mod.object = bbox
     mod.operation = operation
 
-
     result_obj.data.materials.clear()
     for mat in obj.data.materials:
         result_obj.data.materials.append(mat)
@@ -75,15 +79,17 @@ def apply_boolean_modifier(obj, bbox, operation, name, apply_now=False):
         bpy.ops.mesh.select_all(action='SELECT')
         bpy.ops.mesh.quads_convert_to_tris()
         bpy.ops.object.mode_set(mode='OBJECT')
+
     return result_obj
 
-def import_3mf(filepath, apply_modifiers=False, color_similarity_threshold=20):
+def import_3mf(filepath, apply_modifiers=False, color_similarity_threshold=10, bbox_padding=0.0001):
     scene = bpy.context.scene
     scene.unit_settings.system = 'METRIC'
     scene.unit_settings.scale_length = 0.001
 
     with zipfile.ZipFile(filepath, 'r') as archive:
-        model_data = archive.read('3D/Objects/object_2.model')
+        model_filenames = fnmatch.filter(archive.namelist(), '3D/Objects/*.model')
+
         try:
             slice_config = archive.read('Metadata/slice_info.config')
             config_root = ET.fromstring(slice_config)
@@ -96,79 +102,85 @@ def import_3mf(filepath, apply_modifiers=False, color_similarity_threshold=20):
         except KeyError:
             filament_map = {}
 
-    root = ET.fromstring(model_data)
-    ns = {'m': 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02'}
+        ns = {'m': 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02'}
 
-    for obj in root.findall('.//m:object', ns):
-        vertices = []
-        faces = []
-        face_colors = []
-        vertex_color_assignments = defaultdict(list)
+        for model_filename in model_filenames:
+            model_data = archive.read(model_filename)
+            root = ET.fromstring(model_data)
 
-        mesh = obj.find('./m:mesh', ns)
-        for v in mesh.findall('./m:vertices/m:vertex', ns):
-            vertices.append(Vector((float(v.attrib['x']), float(v.attrib['y']), float(v.attrib['z']))))
+            for obj in root.findall('.//m:object', ns):
+                vertices = []
+                faces = []
+                face_colors = []
+                vertex_color_assignments = defaultdict(list)
 
-        color_palette = []
-        merged_color_map = {}
+                mesh = obj.find('./m:mesh', ns)
+                for v in mesh.findall('./m:vertices/m:vertex', ns):
+                    vertices.append(Vector((float(v.attrib['x']), float(v.attrib['y']), float(v.attrib['z']))))
 
-        for tri in mesh.findall('./m:triangles/m:triangle', ns):
-            idxs = [int(tri.attrib[k]) for k in ('v1', 'v2', 'v3')]
-            color_id = tri.attrib.get('paint_color')
-            rgb = (255, 0, 255)
+                color_palette = []
+                merged_color_map = {}
 
-            if color_id:
-                segments = [color_id[i:i+2] for i in range(0, len(color_id), 2)]
-                filament_ids = [str(CONST_FILAMENTS.index(s)) for s in segments if s in CONST_FILAMENTS]
-                rgbs = [filament_map.get(fid, (255, 0, 255)) for fid in filament_ids]
-                rgb = blend_colors(rgbs) if rgbs else (255, 0, 255)
+                for tri in mesh.findall('./m:triangles/m:triangle', ns):
+                    idxs = [int(tri.attrib[k]) for k in ('v1', 'v2', 'v3')]
+                    color_id = tri.attrib.get('paint_color')
+                    rgb = (255, 0, 255)
 
-                for i in idxs:
-                    vertex_color_assignments[i].append(rgb)
+                    if color_id:
+                        segments = [color_id[i:i+2] for i in range(0, len(color_id), 2)]
+                        filament_ids = [str(CONST_FILAMENTS.index(s)) for s in segments if s in CONST_FILAMENTS]
+                        rgbs = [filament_map.get(fid, (255, 0, 255)) for fid in filament_ids]
+                        rgb = blend_colors(rgbs) if rgbs else (255, 0, 255)
 
-            merged = find_similar_color(rgb, color_palette, color_similarity_threshold)
-            if merged:
-                rgb = merged
-            else:
-                color_palette.append(rgb)
+                        for i in idxs:
+                            vertex_color_assignments[i].append(rgb)
 
-            face_colors.append(rgb)
-            faces.append(idxs)
+                    merged = find_similar_color(rgb, color_palette, color_similarity_threshold)
+                    if merged:
+                        rgb = merged
+                    else:
+                        color_palette.append(rgb)
 
-        mesh_data = bpy.data.meshes.new("ImportedMesh")
-        mesh_data.from_pydata(vertices, [], faces)
-        obj_data = bpy.data.objects.new("ImportedObject", mesh_data)
-        bpy.context.collection.objects.link(obj_data)
+                    face_colors.append(rgb)
+                    faces.append(idxs)
 
-        mesh_data.materials.clear()
-        material_index_map = {}
+                mesh_data = bpy.data.meshes.new("ImportedMesh")
+                mesh_data.from_pydata(vertices, [], faces)
+                obj_data = bpy.data.objects.new("ImportedObject", mesh_data)
+                bpy.context.collection.objects.link(obj_data)
 
-        for rgb in color_palette:
-            mat = create_material_from_rgb(rgb)
-            mesh_data.materials.append(mat)
-            material_index_map[rgb] = len(mesh_data.materials) - 1
+                mesh_data.materials.clear()
+                material_index_map = {}
 
-        for i, poly in enumerate(mesh_data.polygons):
-            rgb = face_colors[i]
-            poly.material_index = material_index_map[rgb]
+                for rgb in color_palette:
+                    mat = create_material_from_rgb(rgb)
+                    mesh_data.materials.append(mat)
+                    material_index_map[rgb] = len(mesh_data.materials) - 1
 
-        if vertex_color_assignments:
-            coords = [vertices[i] for i in vertex_color_assignments]
-            min_xyz = Vector((
-                min(v.x for v in coords),
-                min(v.y for v in coords),
-                min(v.z for v in coords),
-            ))
-            max_xyz = Vector((
-                max(v.x for v in coords),
-                max(v.y for v in coords),
-                max(v.z for v in coords),
-            ))
-            bbox = create_bbox(min_xyz, max_xyz)
-            apply_boolean_modifier(obj_data, bbox, 'INTERSECT', 'Colored_Region', apply_now=apply_modifiers)
-            apply_boolean_modifier(obj_data, bbox, 'DIFFERENCE', 'Uncolored_Region', apply_now=apply_modifiers)
-            bbox.hide_viewport = True
-            bbox.hide_render = True
+                for i, poly in enumerate(mesh_data.polygons):
+                    rgb = face_colors[i]
+                    poly.material_index = material_index_map[rgb]
 
-        obj_data.select_set(True)
-        bpy.context.view_layer.objects.active = obj_data
+                if vertex_color_assignments:
+                    coords = [vertices[i] for i in vertex_color_assignments]
+                    min_xyz = Vector((
+                        min(v.x for v in coords),
+                        min(v.y for v in coords),
+                        min(v.z for v in coords),
+                    ))
+                    max_xyz = Vector((
+                        max(v.x for v in coords),
+                        max(v.y for v in coords),
+                        max(v.z for v in coords),
+                    ))
+                    bbox_small = create_bbox(min_xyz.copy(), max_xyz.copy(), padding=0.0)
+                    bbox_large = create_bbox(min_xyz.copy(), max_xyz.copy(), padding=bbox_padding)
+                    apply_boolean_modifier(obj_data, bbox_small, 'INTERSECT', 'Colored_Region', apply_now=apply_modifiers)
+                    apply_boolean_modifier(obj_data, bbox_large, 'DIFFERENCE', 'Uncolored_Region', apply_now=apply_modifiers)
+                    bbox_small.hide_viewport = True
+                    bbox_small.hide_render = True
+                    bbox_large.hide_viewport = True
+                    bbox_large.hide_render = True
+
+                obj_data.select_set(True)
+                bpy.context.view_layer.objects.active = obj_data

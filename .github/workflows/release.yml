@@ -1,0 +1,32 @@
+name: Bambu 3MF Importer Auto Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v3
+
+      - name: 📦 Create ZIP archive
+        run: |
+          mkdir -p dist
+          zip -r dist/bambu_3mf_importer.zip __init__.py import_3_mf_color.py import_3mf_vertex_colored.py
+
+      - name: 🕓 Get current timestamp
+        id: timestamp
+        run: echo "time=$(date +'%Y-%m-%dT%H-%M-%S')" >> $GITHUB_OUTPUT
+
+      - name: 📝 Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: "Auto Release - ${{ steps.timestamp.outputs.time }}"
+          tag_name: "auto-${{ steps.timestamp.outputs.time }}"
+          files: dist/bambu_3mf_importer.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

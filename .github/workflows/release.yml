@@ -33,6 +33,6 @@ jobs:
         with:
           name: "Auto Release - ${{ steps.timestamp.outputs.time }}"
           tag_name: "auto-${{ steps.timestamp.outputs.time }}"
-          files: dist/bambu_3mf_importer.zip
+          files: dist/3mf_import_and_color_split.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
